@@ -1,0 +1,38 @@
+# Worker config (unique to this repo)
+config.json
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Testing
+.hypothesis/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs
+*.log
+
+# Environments
+.env
+.envrc
+.venv
+venv/
+env/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+database.db
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.dmypy.json

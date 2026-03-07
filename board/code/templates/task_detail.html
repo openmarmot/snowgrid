@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="/" style="color:#0f0; text-decoration:none; font-size:1.1em;">← Back to tasks</a>
+
+<h1>Task {{ task.id[:8] }}...</h1>
+
+<div style="display:grid; grid-template-columns:2fr 1fr; gap:30px;">
+    <div>
+        <form method="POST" action="/tasks/{{ task.id }}/update" id="mainForm">
+            
+            <!-- Description -->
+            <div class="card">
+                <h3>Description</h3>
+                <textarea name="description" rows="5">{{ task.description }}</textarea>
+            </div>
+
+            <!-- Status -->
+            <div class="card">
+                <h3>Status</h3>
+                <select name="status">
+                    <option value="new"      {% if task.status=='new' %}selected{% endif %}>New</option>
+                    <option value="wip"      {% if task.status=='wip' %}selected{% endif %}>WIP</option>
+                    <option value="complete" {% if task.status=='complete' %}selected{% endif %}>Complete</option>
+                    <option value="canceled" {% if task.status=='canceled' %}selected{% endif %}>Canceled</option>
+                    <option value="failed"   {% if task.status=='failed' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+
+            <!-- New Log Note -->
+            <div class="card">
+                <h3>New Log Note</h3>
+                <textarea name="log_note" rows="4" placeholder="What was done or why status changed..."></textarea>
+            </div>
+
+            <!-- Work Performed - Much Bigger + Expand Button -->
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h3>Work Performed (Agent Output / Code Review)</h3>
+                    <button type="button" onclick="expandWorkModal()" 
+                            style="background:#222; color:#0f0; border:1px solid #0f0; padding:6px 14px; font-size:0.9em; cursor:pointer;">
+                        🔎 Expand to Full Screen
+                    </button>
+                </div>
+                <textarea name="work" id="workMain" 
+                          rows="40" 
+                          style="min-height:850px; resize:vertical; font-family:monospace; font-size:0.95em;">
+{{ task.work }}
+</textarea>
+            </div>
+
+            <button type="submit">Save All Changes</button>
+        </form>
+    </div>
+
+    <!-- Right Sidebar: Work Log History -->
+    <div class="card" style="height:fit-content;">
+        <h3>Work Log History</h3>
+        <pre>{{ task.work_log or 'No entries yet.' }}</pre>
+    </div>
+</div>
+
+<!-- FULL-SCREEN MODAL -->
+<div id="workModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:1000; padding:20px; box-sizing:border-box; overflow:auto;">
+    <div style="max-width:1400px; margin:auto;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+            <h2 style="margin:0;">Work Performed — Full Screen Editor</h2>
+            <div>
+                <button onclick="saveFromModal()" style="background:#0a0; color:#000; padding:10px 20px; margin-right:10px;">💾 Save & Close</button>
+                <button onclick="closeModal()" style="background:#222; color:#0f0; padding:10px 20px;">Close</button>
+            </div>
+        </div>
+        <textarea id="workModalTextarea" 
+                  style="width:100%; height:calc(100vh - 140px); font-family:monospace; font-size:1em; background:#1a1a1a; color:#0f0; border:1px solid #0f0; resize:none;">
+        </textarea>
+    </div>
+</div>
+
+<script>
+function expandWorkModal() {
+    const mainText = document.getElementById('workMain').value;
+    document.getElementById('workModalTextarea').value = mainText;
+    document.getElementById('workModal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('workModal').style.display = 'none';
+}
+
+function saveFromModal() {
+    const modalText = document.getElementById('workModalTextarea').value;
+    document.getElementById('workMain').value = modalText;
+    closeModal();
+    // Optional: auto-save the whole form
+    // document.getElementById('mainForm').submit();
+}
+</script>
+{% endblock %}

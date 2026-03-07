@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snowgrid</title>
+    <style>
+        body { font-family: monospace; background:#111; color:#0f0; padding:20px; margin:0; line-height:1.5; }
+        .navbar { background:#000; padding:15px; margin-bottom:25px; border-bottom:2px solid #0f0; }
+        .navbar-brand { color:#0f0; font-size:1.4em; text-decoration:none; }
+        .card { background:#1a1a1a; border:1px solid #333; margin-bottom:18px; padding:20px; border-radius:4px; cursor:pointer; }
+        .card:hover { border-color:#0f0; }
+        .status { padding:5px 12px; border-radius:4px; font-weight:bold; font-size:0.9em; }
+        .status-new      { background:#0066ff; color:white; }
+        .status-wip      { background:#ffaa00; color:black; }
+        .status-complete { background:#00aa00; color:black; }
+        .status-canceled { background:#660000; color:white; }
+        .status-failed   { background:#aa0000; color:white; }
+        textarea, input, select { background:#222; color:#0f0; border:1px solid #444; padding:12px; width:100%; font-family:monospace; box-sizing:border-box; }
+        button { background:#0a0; color:#000; border:none; padding:12px 24px; font-weight:bold; cursor:pointer; margin-top:12px; }
+        button:hover { background:#0f0; }
+        h1, h2, h4 { color:#0f0; }
+        .badge { background:#333; color:#0f0; padding:3px 9px; border-radius:3px; }
+        pre { background:#0a0a0a; padding:18px; overflow:auto; max-height:620px; white-space:pre-wrap; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a class="navbar-brand" href="/">🧊 Snowgrid</a>
+    </nav>
+    <div style="max-width:1200px; margin:auto;">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
