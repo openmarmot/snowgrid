@@ -3,3 +3,5 @@ Change Log for snowgrid
 ----------------------------------
 Mar 7 2026
 - initial commit 
+- ui updates
+- removed direct llm endpoint calls as it works better going through opencode 

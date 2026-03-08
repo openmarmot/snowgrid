@@ -11,7 +11,7 @@ input, button { padding:10px; margin:5px 0; font-size:1em; width:100%; box-sizin
 .Pending { background:#aa0; color:#000; }
 .health-line { display:flex; align-items:center; gap:15px; margin:6px 0; }
 .label { width:110px; text-align:right; color:#0f0; }
-.config-grid { display:grid; grid-template-columns:160px 1fr; gap:12px 10px; align-items:center; }
+.config-grid { display:grid; grid-template-columns:180px 1fr; gap:12px 10px; align-items:center; }
 input { background:#222; color:#0f0; border:1px solid #444; }
 button { background:#0a0; color:#000; border:none; font-weight:bold; cursor:pointer; }
 button:hover { background:#0f0; }
@@ -23,7 +23,6 @@ button:hover { background:#0f0; }
 
 <h2>Health Status (last checked: {{ last_check or 'never' }})</h2>
 <div class="health-line"><span class="label">Task API:</span> <span class="status {{ health.task_api }}">{{ health.task_api }}</span></div>
-<div class="health-line"><span class="label">LLM:</span> <span class="status {{ health.llm }}">{{ health.llm }}</span></div>
 <div class="health-line"><span class="label">OpenCode:</span> <span class="status {{ health.opencode }}">{{ health.opencode }}</span></div>
 <div class="health-line"><span class="label"><strong>Overall:</strong></span> <span class="status {{ health.overall }}">{{ health.overall }}</span></div>
 {% if health.errors %}<pre style="color:#f66;">Errors: {{ health.errors }}</pre>{% endif %}
@@ -34,22 +33,16 @@ button:hover { background:#0f0; }
 </div>
 
 <div class="section">
-<h2>Recent Logs (newest first)</h2>
+<h2>Recent Logs</h2>
 <pre>{{ logs }}</pre>
 </div>
 
 <div class="section">
-<h2>Configuration (edit anytime & save)</h2>
+<h2>Configuration</h2>
 <form method="post" id="configForm">
     <div class="config-grid">
         <span class="label">Snowgrid Shard API URL:</span>
         <input type="text" name="TASK_API_URL" value="{{ config.TASK_API_URL or 'http://127.0.0.1:5000' }}">
-
-        <span class="label">LLM Base URL:</span>
-        <input type="text" name="LLM_BASE_URL" value="{{ config.LLM_BASE_URL or 'http://127.0.0.1:8080/v1' }}">
-
-        <span class="label">LLM Model:</span>
-        <input type="text" name="LLM_MODEL" value="{{ config.LLM_MODEL or 'your-model' }}">
 
         <span class="label">OpenCode Model:</span>
         <input type="text" name="OPEN_CODE_MODEL" value="{{ config.OPEN_CODE_MODEL or 'llama.cpp/ggml-org/GLM-4.7-Flash-GGUF:Q8_0' }}">
@@ -61,10 +54,8 @@ button:hover { background:#0f0; }
 <p><a href="/">Manual Refresh</a> — auto-refreshes every 8 seconds</p>
 
 <script>
-// Auto-refresh every 8 seconds (pauses while typing)
 let autoRefresh = true;
 setInterval(() => { if (autoRefresh) location.reload(); }, 8000);
-
 document.querySelectorAll('input').forEach(input => {
     input.addEventListener('focus', () => { autoRefresh = false; });
     input.addEventListener('blur', () => { autoRefresh = true; });

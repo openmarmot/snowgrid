@@ -39,7 +39,7 @@ def init_db():
                 CREATE TABLE tasks (
                     id TEXT PRIMARY KEY,
                     description TEXT NOT NULL,
-                    status TEXT DEFAULT 'new' CHECK(status IN ('new', 'wip', 'complete', 'canceled', 'failed')),
+                    status TEXT DEFAULT 'new' CHECK(status IN ('new', 'wip', 'review', 'complete', 'failed')),
                     work TEXT DEFAULT '',
                     work_log TEXT DEFAULT '',
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -59,7 +59,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
             description TEXT NOT NULL,
-            status TEXT DEFAULT 'new' CHECK(status IN ('new', 'wip', 'complete', 'canceled', 'failed')),
+            status TEXT DEFAULT 'new' CHECK(status IN ('new', 'wip', 'review', 'complete', 'failed')),
             work TEXT DEFAULT '',
             work_log TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -133,15 +133,15 @@ def api_list():
     conn = get_db()
     query = "SELECT id, description, status, created_at, updated_at FROM tasks"
     params = []
-    if status_filter and status_filter in ['new', 'wip', 'complete', 'canceled', 'failed']:
+    if status_filter and status_filter in ['new', 'wip', 'review', 'complete', 'failed']:
         query += " WHERE status = ?"
         params = [status_filter]
     query += """ ORDER BY 
         CASE status 
             WHEN 'new' THEN 0 
             WHEN 'wip' THEN 1 
-            WHEN 'complete' THEN 2 
-            WHEN 'canceled' THEN 3 
+            WHEN 'review' THEN 2 
+            WHEN 'complete' THEN 3 
             WHEN 'failed' THEN 4 
         END, updated_at DESC"""
     tasks = [dict(row) for row in conn.execute(query, params).fetchall()]
@@ -169,11 +169,11 @@ def index():
         SELECT id, description, status, updated_at 
         FROM tasks 
         ORDER BY CASE status 
-            WHEN 'new' THEN 0 WHEN 'wip' THEN 1 WHEN 'complete' THEN 2 WHEN 'canceled' THEN 3 WHEN 'failed' THEN 4 
+            WHEN 'new' THEN 0 WHEN 'wip' THEN 1 WHEN 'review' THEN 2 WHEN 'complete' THEN 3 WHEN 'failed' THEN 4 
         END, updated_at DESC
     """).fetchall()
 
-    grouped = {'new': [], 'wip': [], 'complete': [], 'canceled': [], 'failed': []}
+    grouped = {'new': [], 'wip': [], 'review': [], 'complete': [], 'failed': []}
     for t in tasks:
         grouped[t['status']].append(dict(t))
 
@@ -210,7 +210,7 @@ def web_update(task_id):
     success, msg = perform_task_update(task_id, data)
     if not success:
         return msg, 404
-    return redirect(url_for('task_detail', task_id=task_id))
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     with app.app_context():      # ← THIS LINE FIXES THE ERROR

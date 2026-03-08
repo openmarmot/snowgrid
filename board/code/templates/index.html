@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
-    <h1>Snowgrid</h1>
-    
-    <input type="text" id="searchInput" placeholder="Search tasks..." 
-           style="padding:10px 16px; width:360px; background:#222; color:#0f0; border:1px solid #444; border-radius:4px; font-family:monospace;">
-    
-    <button onclick="showNewTaskModal()" 
-            style="background:#0a0; color:#000; padding:10px 24px; font-weight:bold; border:none; border-radius:4px;">
-        + New Task
-    </button>
+<div style="margin-bottom:25px;">
+    <h1 style="margin:0 0 15px 0;">Snowgrid</h1>
+    <div style="display:flex; gap:15px; align-items:baseline;">
+        <input type="text" id="searchInput" placeholder="Search tasks..." 
+               style="padding:10px 16px; width:360px; background:#222; color:#0f0; border:1px solid #444; border-radius:4px; font-family:monospace;">
+        
+        <button onclick="showNewTaskModal()" 
+                style="background:#0a0; color:#000; padding:10px 24px; font-weight:bold; border:none; border-radius:4px;">
+            + New Task
+        </button>
+    </div>
 </div>
 
 <!-- Horizontally Scrollable Board -->
@@ -82,10 +83,23 @@ document.getElementById('searchInput').addEventListener('input', function() {
 
 function showNewTaskModal() {
     document.getElementById('newTaskModal').style.display = 'block';
+    autoRefresh = false;
 }
 function hideNewTaskModal() {
     document.getElementById('newTaskModal').style.display = 'none';
+    autoRefresh = true;
 }
+
+// Auto-refresh every 8 seconds (pauses while typing in search)
+let autoRefresh = true;
+setInterval(() => { if (autoRefresh) location.reload(); }, 8000);
+
+document.getElementById('searchInput').addEventListener('focus', () => { 
+    autoRefresh = false; 
+});
+document.getElementById('searchInput').addEventListener('blur', () => { 
+    autoRefresh = true; 
+});
 </script>
 
 {% endblock %}

@@ -7,19 +7,30 @@ import subprocess
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import requests
-from openai import OpenAI
 
 app = Flask(__name__)
 CONFIG_FILE = 'config.json'
 WORKER_STATUS = {"task_id": None, "status": "Idle", "log": []}
 HEALTH_STATUS = {
     "task_api": "Pending",
-    "llm": "Pending",
     "opencode": "Pending",
     "overall": "Pending",
     "last_check": None,
     "errors": {}
 }
+
+def quick_health_check():
+    try:
+        call_task_api("GET", "/api/tasks")
+        HEALTH_STATUS["task_api"] = "Healthy"
+        HEALTH_STATUS["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return True
+    except Exception as e:
+        HEALTH_STATUS["task_api"] = "Unhealthy"
+        HEALTH_STATUS["overall"] = "Unhealthy"
+        HEALTH_STATUS["errors"]["task_api"] = str(e)[:150]
+        HEALTH_STATUS["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return False
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -57,7 +68,6 @@ def update_task(task_id, status=None, work=None, log_note=None):
     except Exception as e:
         log(f"Update failed: {e}")
 
-# ====================== PROMPTS (unchanged - already excellent) ======================
 PROMPTS = {
     "opencode": """You are an expert AI coding agent. Follow the task description EXACTLY as written:
 
@@ -74,114 +84,67 @@ Previous attempt output:
 
 Start now.""",
 
-    "judge": """You are a strict, accurate, and impartial task completion judge.
+    "judge": """You are a strict task completion judge.
 
 TASK DESCRIPTION:
 {description}
 
-AGENT STDOUT (this is the main output / result the agent produced):
-{stdout}
+AGENT OUTPUT:
+{agent_output}
 
-AGENT STDERR (runtime logs from the tool — usually just normal model loading messages like "build · ggml-..." — these are NOT errors and can be ignored unless they show a real crash):
-{stderr}
+Did the agent complete the task EXACTLY as described?
 
-Evaluate whether the agent SUCCESSFULLY completed the task EXACTLY as described.
+Start your reply with exactly one of these two lines and nothing else before it:
 
-- For creative tasks (haiku, story, poem, etc.): Does STDOUT contain exactly what was asked?
-- For coding/analysis tasks: Did it perform the required steps and produce the expected result?
-- Ignore normal STDERR model-loading lines completely.
-
-Be fair but strict. Only mark as DONE if the STDOUT clearly proves the task is 100% complete.
-
-Reply with ONLY this exact JSON (no markdown, no extra text, no explanations):
-{{
-  "decision": "DONE" or "NEED_MORE",
-  "reason": "one short sentence explaining your decision"
-}}
-"""
+DONE: one short sentence why it is complete
+NEED_MORE: one short sentence why more work is needed"""
 }
 
-# ====================== HELPER FUNCTIONS ======================
 def run_opencode_task(description: str, previous_output: str, model: str, cwd: str, timeout: int = 720):
-    """Run opencode. Returns (full_output_for_logs, stdout, stderr, success)."""
     prompt = PROMPTS["opencode"].format(
         description=description,
         previous_output=previous_output or "None yet"
     )
-
     try:
         result = subprocess.run(
             ["opencode", "run", prompt, "--model", model],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=cwd
+            capture_output=True, text=True, timeout=timeout, cwd=cwd
         )
         full_output = f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
-        return full_output, result.stdout, result.stderr, result.returncode == 0
+        agent_output = f"Execution trace:\n{result.stderr}\n\nFinal summary:\n{result.stdout}"
+        return full_output, agent_output
     except subprocess.TimeoutExpired:
-        return "TIMEOUT after 12 minutes", "TIMEOUT", "TIMEOUT", False
+        return "TIMEOUT after 12 minutes", "TIMEOUT"
     except Exception as e:
         err = f"ERROR running opencode: {e}"
-        return err, err, "", False
+        return err, err
 
-
-def judge_task_completion(description: str, stdout: str, stderr: str, base_url: str, model: str):
-    """Single attempt at judging (core logic). Raises on any error so retries can happen higher up."""
+def run_opencode_judge(description: str, agent_output: str, model: str):
     prompt = PROMPTS["judge"].format(
         description=description,
-        stdout=stdout[:7000],
-        stderr=stderr[:1000]
+        agent_output=agent_output[:7500]
     )
-
-    raw = ""
     try:
-        client = OpenAI(base_url=base_url, api_key="dummy")
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=90
+        result = subprocess.run(
+            ["opencode", "run", prompt, "--model", model],
+            capture_output=True, text=True, timeout=90, cwd="/"
         )
-        raw = resp.choices[0].message.content.strip()
+        raw = result.stdout.strip()
+        log(f"RAW JUDGE OUTPUT:\n{raw}")
 
-        if raw.startswith("```json"):
-            raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
-        elif raw.startswith("```"):
-            raw = raw.split("```", 1)[1].strip()
+        # Super simple parsing — looks for the magic line at the start
+        for line in raw.splitlines()[:8]:
+            line = line.strip()
+            if line.upper().startswith("DONE:"):
+                return {"decision": "DONE", "reason": line[5:].strip()}
+            if line.upper().startswith("NEED_MORE:"):
+                return {"decision": "NEED_MORE", "reason": line[10:].strip()}
 
-        decision = json.loads(raw)
-        if "decision" not in decision or "reason" not in decision:
-            raise ValueError("Missing keys in JSON")
-        return {
-            "decision": decision["decision"],
-            "reason": decision.get("reason", "No reason provided")
-        }
+        return {"decision": "NEED_MORE", "reason": "Judge did not start with DONE: or NEED_MORE:"}
     except Exception as e:
-        log(f"Judge attempt failed: {e} | Raw: {raw[:300] if raw else 'empty'}")
-        raise  # let the retry wrapper catch it
+        log(f"Judge crashed: {e}")
+        return {"decision": "NEED_MORE", "reason": "Judge execution error"}
 
-
-def judge_with_retries(description: str, stdout: str, stderr: str, base_url: str, model: str):
-    """Retry the judge up to 3 times on any error/timeout before giving up.
-    This prevents re-running the expensive opencode task just because the judge flaked."""
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            decision = judge_task_completion(description, stdout, stderr, base_url, model)
-            if attempt > 1:
-                log(f"✅ Judge succeeded on retry {attempt}/{max_retries}")
-            return decision
-        except Exception:
-            if attempt < max_retries:
-                wait = attempt * 2
-                log(f"Judge retry {attempt}/{max_retries} failed — waiting {wait}s before next try...")
-                time.sleep(wait)
-            else:
-                log(f"❌ Judge failed after {max_retries} retries")
-                return {"decision": "NEED_MORE", "reason": "Judge failed after 3 retries (timeout/parse error)"}
-
-
-# ====================== HEALTH CHECK (unchanged) ======================
 def perform_health_check():
     global HEALTH_STATUS
     errors = {}
@@ -196,67 +159,49 @@ def perform_health_check():
         errors["task_api"] = str(e)[:150]
 
     try:
-        if config.get("LLM_BASE_URL"):
-            client = OpenAI(base_url=config["LLM_BASE_URL"], api_key="dummy")
-            client.models.list(timeout=8)
-            HEALTH_STATUS["llm"] = "Healthy"
-            healthy_count += 1
-        else:
-            HEALTH_STATUS["llm"] = "Unhealthy"
-            errors["llm"] = "Not configured"
-    except Exception as e:
-        HEALTH_STATUS["llm"] = "Unhealthy"
-        errors["llm"] = str(e)[:150]
-
-    try:
         model = config.get("OPEN_CODE_MODEL", "").strip()
         if not model:
             raise ValueError("OPEN_CODE_MODEL not set")
         result = subprocess.run(
             ["opencode", "run", "Print exactly: HEALTH_CHECK_OK", "--model", model],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd="/"
+            capture_output=True, text=True, timeout=30, cwd="/"
         )
-        stdout = result.stdout.lower()
-        if result.returncode == 0 and "health_check_ok" in stdout:
+        if result.returncode == 0 and "health_check_ok" in result.stdout.lower():
             HEALTH_STATUS["opencode"] = "Healthy"
             healthy_count += 1
         else:
             HEALTH_STATUS["opencode"] = "Unhealthy"
-            error_msg = (result.stderr or result.stdout or "Unknown error")[:200]
-            if "model not found" in error_msg.lower():
-                error_msg = f"Model '{model}' not found. Check OPEN_CODE_MODEL."
-            errors["opencode"] = error_msg
+            errors["opencode"] = (result.stderr or result.stdout or "Unknown")[:200]
     except Exception as e:
         HEALTH_STATUS["opencode"] = "Unhealthy"
         errors["opencode"] = str(e)[:200]
 
-    HEALTH_STATUS["overall"] = "Healthy" if healthy_count == 3 else "Unhealthy"
+    HEALTH_STATUS["overall"] = "Healthy" if healthy_count == 2 else "Unhealthy"
     HEALTH_STATUS["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     HEALTH_STATUS["errors"] = errors
     return HEALTH_STATUS["overall"] == "Healthy"
 
-
-# ====================== WORKER LOOP ======================
 def worker_loop():
     global config
-    while True:
-        if not perform_health_check():
-            log(f"Health check FAILED — waiting 45s")
-            time.sleep(45)
-            continue
+    log("AI Worker started — simple plain-text judge (no JSON)")
+    perform_health_check()
 
-        if not all(k in config for k in ["TASK_API_URL", "LLM_BASE_URL", "LLM_MODEL", "OPEN_CODE_MODEL"]):
+    while True:
+        quick_health_check()
+
+        if not all(k in config for k in ["TASK_API_URL", "OPEN_CODE_MODEL"]):
             time.sleep(10)
             continue
 
         try:
             tasks = call_task_api("GET", "/api/tasks?status=new")["tasks"]
             if not tasks:
-                log("No new tasks — sleeping 30s")
                 time.sleep(30)
+                continue
+
+            log("New task — running full health check...")
+            if not perform_health_check():
+                time.sleep(45)
                 continue
 
             task = tasks[0]
@@ -275,72 +220,52 @@ def worker_loop():
                 log(f"--- Attempt {attempt}/{max_attempts} for {task_id} ---")
 
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    log(f"Working in temp dir: {tmpdir}")
-                    full_output, stdout, stderr, _ = run_opencode_task(
-                        description=description,
-                        previous_output=previous_output,
-                        model=config["OPEN_CODE_MODEL"],
-                        cwd=tmpdir
+                    full_output, agent_output = run_opencode_task(
+                        description, previous_output, config["OPEN_CODE_MODEL"], tmpdir
                     )
 
                 print("\n" + "="*100)
                 print(f"FULL OPCODE OUTPUT — ATTEMPT {attempt} — TASK {task_id}")
                 print("="*100)
-                print(full_output)
+                print(agent_output)
                 print("="*100 + "\n")
 
-                log("Full opencode output printed above")
                 update_task(task_id, work=full_output, log_note=f"Attempt {attempt} completed")
-
                 previous_output = full_output[:3500]
 
-                # === Judge with built-in retries (new) ===
-                decision = judge_with_retries(
-                    description=description,
-                    stdout=stdout,
-                    stderr=stderr,
-                    base_url=config["LLM_BASE_URL"],
-                    model=config["LLM_MODEL"]
-                )
+                decision = run_opencode_judge(description, agent_output, config["OPEN_CODE_MODEL"])
 
-                log(f"LLM decision: {decision.get('decision')} — {decision.get('reason')}")
+                log(f"Judge: {decision.get('decision')} — {decision.get('reason')}")
 
                 if decision.get("decision") == "DONE":
-                    update_task(task_id, status="complete", log_note=f"Completed on attempt {attempt}")
-                    log(f"✅ Task {task_id} marked COMPLETE on attempt {attempt}")
-                    log("✅ Task marked COMPLETE")
+                    update_task(task_id, status="review", log_note=f"Completed on attempt {attempt}")
+                    log(f"✅ Task {task_id} marked REVIEW")
                     break
                 elif attempt == max_attempts:
-                    update_task(task_id, status="failed", log_note=f"Failed after {max_attempts} attempts — {decision.get('reason')}")
-                    log(f"❌ Task {task_id} marked FAILED after {max_attempts} attempts — {decision.get('reason')}")
-                    log("❌ Task marked FAILED")
+                    update_task(task_id, status="failed", log_note=f"Failed after {max_attempts} attempts")
+                    log(f"❌ Task {task_id} marked FAILED")
                 else:
-                    log("Retrying full task...")
+                    log("Retrying...")
 
         except Exception as e:
             log(f"Worker error: {e}")
             if WORKER_STATUS.get("task_id"):
-                update_task(WORKER_STATUS["task_id"], status="failed", log_note=f"Agent crashed: {str(e)[:200]}")
+                update_task(WORKER_STATUS["task_id"], status="failed", log_note=f"Crash: {str(e)[:150]}")
         finally:
             WORKER_STATUS["task_id"] = None
             WORKER_STATUS["status"] = "Idle"
 
-
-# ====================== FLASK UI (unchanged) ======================
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global config
     if request.method == 'POST':
         config = {
             "TASK_API_URL": request.form["TASK_API_URL"],
-            "LLM_BASE_URL": request.form["LLM_BASE_URL"],
-            "LLM_MODEL": request.form["LLM_MODEL"],
             "OPEN_CODE_MODEL": request.form["OPEN_CODE_MODEL"]
         }
         save_config(config)
-        log("Configuration updated via web UI")
+        log("Configuration updated")
         perform_health_check()
-        log("Health check triggered after config save")
         return redirect(url_for('index'))
 
     return render_template('agent.html',
@@ -356,8 +281,7 @@ def index():
 def health_json():
     return jsonify(HEALTH_STATUS)
 
-
 if __name__ == '__main__':
     threading.Thread(target=worker_loop, daemon=True).start()
-    log("AI Worker Agent started — judge now retries 3x on timeout/error before retrying full task")
+    log("Snowgrid Shard Agent started — now using simple plain-text judge (no JSON)")
     app.run(host='0.0.0.0', port=5001, debug=False)

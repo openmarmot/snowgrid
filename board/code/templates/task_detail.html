@@ -21,7 +21,7 @@
                     <option value="new"      {% if task.status=='new' %}selected{% endif %}>New</option>
                     <option value="wip"      {% if task.status=='wip' %}selected{% endif %}>WIP</option>
                     <option value="complete" {% if task.status=='complete' %}selected{% endif %}>Complete</option>
-                    <option value="canceled" {% if task.status=='canceled' %}selected{% endif %}>Canceled</option>
+                    <option value="review" {% if task.status=='review' %}selected{% endif %}>Review</option>
                     <option value="failed"   {% if task.status=='failed' %}selected{% endif %}>Failed</option>
                 </select>
             </div>
