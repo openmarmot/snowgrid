@@ -162,19 +162,25 @@ def perform_health_check():
         model = config.get("OPEN_CODE_MODEL", "").strip()
         if not model:
             raise ValueError("OPEN_CODE_MODEL not set")
+
         result = subprocess.run(
             ["opencode", "run", "Print exactly: HEALTH_CHECK_OK", "--model", model],
-            capture_output=True, text=True, timeout=30, cwd="/"
+            capture_output=True, text=True, timeout=90, cwd="/"   # ← was 30s
         )
-        if result.returncode == 0 and "health_check_ok" in result.stdout.lower():
+
+        output = (result.stdout + result.stderr).lower()
+        if result.returncode == 0 and "health_check_ok" in output:
             HEALTH_STATUS["opencode"] = "Healthy"
             healthy_count += 1
         else:
             HEALTH_STATUS["opencode"] = "Unhealthy"
-            errors["opencode"] = (result.stderr or result.stdout or "Unknown")[:200]
+            errors["opencode"] = f"Bad output (code {result.returncode}): {output[:250]}"
+    except subprocess.TimeoutExpired:
+        HEALTH_STATUS["opencode"] = "Unhealthy"
+        errors["opencode"] = "opencode run timed out after 90s (normal cold-start on 35B model)"
     except Exception as e:
         HEALTH_STATUS["opencode"] = "Unhealthy"
-        errors["opencode"] = str(e)[:200]
+        errors["opencode"] = str(e)[:250]
 
     HEALTH_STATUS["overall"] = "Healthy" if healthy_count == 2 else "Unhealthy"
     HEALTH_STATUS["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

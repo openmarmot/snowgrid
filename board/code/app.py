@@ -67,7 +67,7 @@ def init_db():
         )
     ''')
     conn.commit()
-    print("✅ Database ready (integrated init + migration)")
+    print("✅ Database ready")
 
 def append_to_log(current_log, note):
     if not note:
@@ -213,6 +213,6 @@ def web_update(task_id):
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    with app.app_context():      # ← THIS LINE FIXES THE ERROR
+    with app.app_context():
         init_db()
     app.run(debug=True)

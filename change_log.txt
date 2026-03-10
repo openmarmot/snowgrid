@@ -1,6 +1,13 @@
 Change Log for snowgrid 
 
 ----------------------------------
+Mar 9 2026
+- updated agent opencode health check timeout 
+- minor updates 
+
+opencode time to first response is really long due to system prompt injection or who knows what. 
+makes the health check troublesome. hmm. 
+----------------------------------
 Mar 7 2026
 - initial commit 
 - ui updates
