@@ -12,6 +12,8 @@ Snowgrid is a distributed task management system that combines a Kanban-style bo
 
 A Flask-based web interface for managing tasks via a horizontal Kanban board.
 
+![Board Interface](/screenshots/snowgrid_board.png "Snowgrid Board")
+
 **Features:**
 - Task creation and management
 - Status tracking: new → wip → review → complete/failed
@@ -90,9 +92,6 @@ Configuration is stored in `agents/shard/config.json`.
                     └──────────────┘
 ```
 
-## Screenshots
-
-![Board Interface](/screenshots/snowgrid_board.png "Snowgrid Board")
 ![Task View](/screenshots/snowgrid_task.png "Snowgrid Task")
 
 ## Workflow
