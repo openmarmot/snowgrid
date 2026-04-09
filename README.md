@@ -90,6 +90,11 @@ Configuration is stored in `agents/shard/config.json`.
                     └──────────────┘
 ```
 
+## Screenshots
+
+![Board Interface](/screenshots/snowgrid_board.png "Snowgrid Board")
+![Task View](/screenshots/snowgrid_task.png "Snowgrid Task")
+
 ## Workflow
 
 1. Human creates a task on the Board (e.g., "git clone repo && review code")
